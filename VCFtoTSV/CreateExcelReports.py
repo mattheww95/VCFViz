@@ -10,8 +10,11 @@ With great sadness:
 
 # imports I didnt want to bring in, but makes my life easier
 # Note the quality of libraries is great, I just didnt want to have to add dependencies
-#import openpyxl
+import openpyxl
 import pandas as pd
+
+# My crappy code
+from VCFlogging import VCFLogger as vlog
 
 # Nice python library 
 import os
@@ -24,7 +27,8 @@ class HTMLToExcel:
     Read all html tables in a directory and covert to a single excel file
     """
     _glob_word_ = "test" # the word terminating the html plots generated currently
-    def __init__(self, directory_recurse) -> None:
+    def __init__(self, directory_recurse, outpath) -> None:
+        self.outpath = outpath
         self.html_voc_data = {}
         self.directory_recurse = directory_recurse
         self.directories = self.recurse_directory()
@@ -34,8 +38,8 @@ class HTMLToExcel:
         """
         Read html file and 
         """
-        #fp = f"./tests/Delta_{self._glob_word_}.html"
         sample_name = os.path.basename(fp)[:os.path.basename(fp).index("_")]
+        vlog.logger.info(f"Reading HTML data from output file {sample_name}")
         df = pd.read_html(fp)
         samples = [i for i in list(df[0].columns)[1:]]
         df[0].rename(columns={"Unnamed: 0": "NucName+AAName"}, inplace=True)
@@ -44,7 +48,6 @@ class HTMLToExcel:
         df[0]["Position"] = df[0]["NucName"].apply(lambda x: int(''.join([i for i in x if i.isdigit()])))
         df[0] = df[0].reindex(columns=["VOC", "Position", "AAName", "NucName", "NucName+AAName", *samples])
         self.html_voc_data[sample_name] = df[0] # update and maintain a worksheets in place
-        print(df[0].columns)
         return True
     
     def recurse_directory(self):
@@ -57,11 +60,16 @@ class HTMLToExcel:
     
     def html_dict_to_excel(self):
         """
-        Take in the
+        write the dataframes to a single excel spread sheet
         """
-        ...
+        vlog.logger.info(f"Converting HTML data to Excel summary file")
+        writer = pd.ExcelWriter(os.path.join(self.outpath, "SummaryExcelfile.xlsx"), engine=openpyxl)
+        for key in self.html_dict_to_excel.keys():
+            self.html_dict_to_excel[key].to_excel(writer, sheet_name=key, index=False)
+        writer.save()
+        vlog.logger.info(f"Completed conversion of HTML files to an Excel summary file")
 
 
 if __name__=="__main__":
     xx = HTMLToExcel("./tests")
-    print(xx.html_voc_data.keys())
+    xx.html_dict_to_excel()
