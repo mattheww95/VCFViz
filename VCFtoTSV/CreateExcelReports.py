@@ -10,8 +10,10 @@ With great sadness:
 
 # imports I didnt want to bring in, but makes my life easier
 # Note the quality of libraries is great, I just didnt want to have to add dependencies
-import openpyxl
+
 import pandas as pd
+#remove openpyxl import as pandas will call it internally, and it was not working 
+# TODO add openpyxl to conda dependencies
 
 # My crappy code
 from VCFlogging import VCFLogger as vlog
@@ -63,13 +65,13 @@ class HTMLToExcel:
         write the dataframes to a single excel spread sheet
         """
         vlog.logger.info(f"Converting HTML data to Excel summary file")
-        writer = pd.ExcelWriter(os.path.join(self.outpath, "SummaryExcelfile.xlsx"), engine=openpyxl)
-        for key in self.html_dict_to_excel.keys():
-            self.html_dict_to_excel[key].to_excel(writer, sheet_name=key, index=False)
+        writer = pd.ExcelWriter(os.path.join(self.outpath, "SummaryExcelfile.xlsx"))
+        for key in self.html_voc_data.keys():
+            self.html_voc_data[key].to_excel(writer, sheet_name=key, index=False)
         writer.save()
         vlog.logger.info(f"Completed conversion of HTML files to an Excel summary file")
 
 
 if __name__=="__main__":
-    xx = HTMLToExcel("./tests")
+    xx = HTMLToExcel("./test", "./test")
     xx.html_dict_to_excel()
