@@ -4,14 +4,14 @@ Create some unit tests for this program cause hell yeah
 2022-05-19: Matthew Wells
 """
 
-from inspect import ArgInfo
-import CommandLineArgs
+
+import VCFtoTSV.CommandLineArgs as CommandLineArgs
 import unittest
-from RenderHTML import VCFDataHTML
-from VCFToJson import ReadIvar
-from VCFToJson import ReadVCF
-import CoverageData
-from VCFlogging import VCFLogger as vlog
+from VCFtoTSV.RenderHTML import VCFDataHTML
+from VCFtoTSV.VCFToJson import ReadIvar
+from VCFtoTSV.VCFToJson import ReadVCF
+from VCFtoTSV.CoverageData import CoverageData
+from VCFtoTSV.VCFlogging import VCFLogger as vlog
 import logging
 import time
 import InputOptions

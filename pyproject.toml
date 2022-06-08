@@ -1,0 +1,21 @@
+[build-system]
+requires = [
+    "setuptools >= 52.0.0",
+]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "VCFToTSV"
+description = "A rework of vcfparser created by Kyrylo Bessonov and can be found here: https://github.com/kbessonov1984/VCFParser"
+readme = "README.md"
+version = "0.0.1"
+keywords = ["VCF", "Visulization"]
+license = {text = ""}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: Linux"
+]
+
+[project.scripts]
+VCFViz= "VCFtoTSV.CommandLineArgs:run_main"

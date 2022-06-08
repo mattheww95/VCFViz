@@ -15,7 +15,7 @@ import glob
 from re import S
 import subprocess
 from typing import List
-from VCFlogging import VCFLogger as vlog
+from VCFtoTSV.VCFlogging import VCFLogger as vlog
 import json
 
 

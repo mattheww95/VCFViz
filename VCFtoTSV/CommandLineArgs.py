@@ -5,8 +5,7 @@ the right args to the right function.
 2022-05-29: Matthew Wells
 """
 import argparse
-from ast import arg
-import InputOptions
+import VCFtoTSV.InputOptions as InputOptions
 import os
 from typing import Any
 import sys
@@ -63,13 +62,16 @@ class Argparser:
             sys.exit(-1)
         else:
             parser_args = parser.parse_args()
+            if len(self.args) == 1:
+                parser.print_help()
+                exit(-1)
             function_to_call = self.args[1]
             self.functions_call[function_to_call](**parser_args.__dict__)
     
     def __init__(self, *args, **kwargs):
         self.args = args[0]
 
-def main():
+def run_main():
     """
     The main entry point for the program.
     """
@@ -77,11 +79,11 @@ def main():
     run1()
 
 if __name__ == "__main__":
-    
-    test_sub_sheet = "tests/test_vcfparser_subsheet_.txt"
-    test_metadata_sheet = "tests/VCFParser_tester.txt"
-    cov_thresh = 30
-    outdir = "./tests"
-    sys.argv.extend(["input-file", "-s", test_sub_sheet, "-o", outdir, "-c", str(cov_thresh), "-m", test_metadata_sheet])
-    t1 = Argparser(sys.argv)
-    t1()
+    run_main(sys.argv)
+    #test_sub_sheet = "tests/test_vcfparser_subsheet_.txt"
+    #test_metadata_sheet = "tests/VCFParser_tester.txt"
+    #cov_thresh = 30
+    #outdir = "./tests"
+    #sys.argv.extend(["input-file", "-s", test_sub_sheet, "-o", outdir, "-c", str(cov_thresh), "-m", test_metadata_sheet])
+    #t1 = Argparser(sys.argv)
+    #t1()

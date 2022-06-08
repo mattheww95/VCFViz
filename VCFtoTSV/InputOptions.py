@@ -3,14 +3,11 @@ Handle different input options being either globs, input sheet or specification 
 
 2022-05-30: Matthew Wells
 """
-import RenderHTML
-import CoverageData
-from VCFlogging import VCFLogger as vlog
-from VCFToJson import ReadIvar
-from RenderHTML import VCFDataHTML
+from VCFtoTSV.VCFlogging import VCFLogger as vlog
+from VCFtoTSV.VCFToJson import ReadIvar
+from VCFtoTSV.RenderHTML import VCFDataHTML
 from datetime import datetime
 import os
-
 from VCFtoTSV.CreateExcelReports import HTMLToExcel
 
 

@@ -11,12 +11,10 @@ from datetime import datetime
 import glob
 from typing import NamedTuple, List
 import os
-from CoverageData import SampleMap, SamplesCoverage
-import CoverageData
-from VCFToJson import ReadIvar, ReadVCF, IvarFields
-from VCFlogging import VCFLogger as vlog
+from VCFtoTSV import CoverageData
+from VCFtoTSV.VCFToJson import ReadIvar, ReadVCF, IvarFields
+from VCFtoTSV.VCFlogging import VCFLogger as vlog
 import statistics
-import copy
 
 
 
