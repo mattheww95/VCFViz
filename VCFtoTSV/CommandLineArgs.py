@@ -22,7 +22,8 @@ class Argparser:
     functions_call = {
                     "input-file": InputOptions.process_submission_sheet, 
                     "directory-glob": InputOptions.glob_directories, 
-                    "wastewater-run": InputOptions.wastewater_run
+                    "wastewater-run": InputOptions.wastewater_run,
+                    "summarize-excel": InputOptions.create_summary_excel_report
                     }
     def __call__(self) -> Any:
        
@@ -50,6 +51,13 @@ class Argparser:
         parser_3.add_argument("-i", "--input-directory", help="Input of wastewater data configured directory")
         parser_3.add_argument("-c", "--coverage-threshold", help="Set the minimum depth of coverage for allele prescencem default is 30", default=30, type=int)
         parser_3.add_argument("-m", "--metadata", help="The metadata sheet to use for subsetting VCF files.")
+
+        #--- Post run to optionally summarize html reports into a spreadsheet
+        parser_4 = subparsers.add_parser("summarize-excel", help="Create a summary excel file of the final html data.")
+        parser_4.add_argument("-d", "--directory-html", help="The directory containing the html run data.")
+        parser_4.add_argument("-o", "--output-path", help="Place to output summary data as an excel file.")
+
+
         if len(self.args) == 0:
             parser.print_help()
             sys.exit(-1)
@@ -60,6 +68,13 @@ class Argparser:
     
     def __init__(self, *args, **kwargs):
         self.args = args[0]
+
+def main():
+    """
+    The main entry point for the program.
+    """
+    run1 = Argparser(sys.argv)
+    run1()
 
 if __name__ == "__main__":
     

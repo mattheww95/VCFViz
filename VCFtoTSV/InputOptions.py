@@ -11,6 +11,8 @@ from RenderHTML import VCFDataHTML
 from datetime import datetime
 import os
 
+from VCFtoTSV.CreateExcelReports import HTMLToExcel
+
 
 #Submission sheet input (Retain sample order)
 def process_submission_sheet(sample_sheet: str, metadata: str, coverage_threshold: int, output_directory: str):
@@ -73,6 +75,16 @@ def wastewater_run(input_directory, metadata, coverage_threshold):
             pass
     end = datetime.now()
     vlog.logger.info(f"Finished: {input_directory} in {end - start}")
+
+def create_summary_excel_report(directory_html, output_path):
+    """
+    Create a summary report of the html run information output into excel
+    """
+    vlog.logger.info("Creating Excel summary of HTML information.")
+    xx = HTMLToExcel(directory_html, output_path)
+    xx.html_dict_to_excel()
+    vlog.logger.info(f"Excel file output to {output_path}")
+
 
 if __name__ == "__main__":
     test_sub_sheet = "tests/test_vcfparser_subsheet_.txt"
