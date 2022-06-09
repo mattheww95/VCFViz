@@ -16,7 +16,7 @@ import pandas as pd
 # TODO add openpyxl to conda dependencies
 
 # My crappy code
-from VCFtoTSV.VCFlogging import VCFLogger as vlog
+from VCFViz.VCFlogging import VCFLogger as vlog
 
 # Nice python library 
 import os

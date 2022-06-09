@@ -3,12 +3,12 @@ Handle different input options being either globs, input sheet or specification 
 
 2022-05-30: Matthew Wells
 """
-from VCFtoTSV.VCFlogging import VCFLogger as vlog
-from VCFtoTSV.VCFToJson import ReadIvar
-from VCFtoTSV.RenderHTML import VCFDataHTML
+from VCFViz.VCFlogging import VCFLogger as vlog
+from VCFViz.VCFToJson import ReadIvar
+from VCFViz.RenderHTML import VCFDataHTML
 from datetime import datetime
 import os
-from VCFtoTSV.CreateExcelReports import HTMLToExcel
+from VCFViz.CreateExcelReports import HTMLToExcel
 
 
 #Submission sheet input (Retain sample order)

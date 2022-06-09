@@ -5,13 +5,13 @@ Create some unit tests for this program cause hell yeah
 """
 
 
-import VCFtoTSV.CommandLineArgs as CommandLineArgs
+import VCFViz.CommandLineArgs as CommandLineArgs
 import unittest
-from VCFtoTSV.RenderHTML import VCFDataHTML
-from VCFtoTSV.VCFToJson import ReadIvar
-from VCFtoTSV.VCFToJson import ReadVCF
-from VCFtoTSV.CoverageData import CoverageData
-from VCFtoTSV.VCFlogging import VCFLogger as vlog
+from VCFViz.RenderHTML import VCFDataHTML
+from VCFViz.VCFToJson import ReadIvar
+from VCFViz.VCFToJson import ReadVCF
+from VCFViz.CoverageData import CoverageData
+from VCFViz.VCFlogging import VCFLogger as vlog
 import logging
 import time
 import InputOptions

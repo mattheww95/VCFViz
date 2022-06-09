@@ -5,7 +5,7 @@ the right args to the right function.
 2022-05-29: Matthew Wells
 """
 import argparse
-import VCFtoTSV.InputOptions as InputOptions
+import VCFViz.InputOptions as InputOptions
 import os
 from typing import Any
 import sys

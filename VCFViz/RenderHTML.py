@@ -11,9 +11,9 @@ from datetime import datetime
 import glob
 from typing import NamedTuple, List
 import os
-from VCFtoTSV import CoverageData
-from VCFtoTSV.VCFToJson import ReadIvar, ReadVCF, IvarFields
-from VCFtoTSV.VCFlogging import VCFLogger as vlog
+from VCFViz import CoverageData
+from VCFViz.VCFToJson import ReadIvar, ReadVCF, IvarFields
+from VCFViz.VCFlogging import VCFLogger as vlog
 import statistics
 
 
