@@ -10,6 +10,3 @@ To run:
     - Run options will be elaborated on in the future
   
 
-#IMPORTANT
-Sorry for calling the report VCFtoTSV when it does not do that at all anymore...
-I will fix that in the future...
