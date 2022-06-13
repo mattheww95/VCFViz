@@ -366,6 +366,7 @@ class VCFDataHTML:
                         cov = vcf_row.sample_depth
                         #TODO preprocess this to speed it up
                         #TODO make logic prepared for mixture of wildtype and alternate
+                        #TODO need to add in flag for reversions to show up
                         
                         sample_data = self.determine_sample(vcf_row.sample_name)
                         val = sample_data.vcf_info.get(vcf_row.metadata.Position)
