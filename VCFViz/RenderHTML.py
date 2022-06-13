@@ -348,7 +348,7 @@ class VCFDataHTML:
             html_figure.append("</thead>")
 
             for voic in voic_data.keys(): # add figure data
-                html_figure.append("<tr style=\"height:200px;\">")
+                html_figure.append("<tr style=\"height:200px;width:50px\">")
                 col_name = voic_data[voic][0].metadata.AAName + "|" + voic_data[voic][0].metadata.NucName # getting first value for row name
                 html_figure.append("<td style=\"font-weight: 600;padding: 10px;font-size:50px;\">" + col_name + self.td_tags[1])
                 for vcf_row in voic_data[voic]:
@@ -398,6 +398,7 @@ class VCFDataHTML:
         """
         glob_pattern = os.path.join(self.out_dir, f"*{self.final_tag}.html")
         plots = glob.glob(glob_pattern)
+        plots = sorted(plots)
         html_pages = []
         headers = []
         header_tag = self.info_header_tag[0]
@@ -472,10 +473,10 @@ class VCFDataHTML:
 if __name__ == "__main__":
     ivar_data_ = ReadIvar("tests/22_AB16_GP_0414.tsv")
     ivar_data2 = ReadIvar("tests/22_WPG17_NE_0426_2.tsv")
-    #vcf_html = VCFDataHTML([ivar_data2, ivar_data_], "tests/VCFParser_20220516.txt")
-    #vcf_html.combine_html_plots()
     parser_sheet = "tests/VCFParser_20220516.txt"
-    import InputOptions
+    vcf_html = VCFDataHTML([ivar_data2, ivar_data_], "tests/VCFParser_tester.txt", "./tests", 30, "./tests")
+    vcf_html.combine_html_plots()
+    #import InputOptions
     #InputOptions.glob_directories(t_ivar, bam_dir, parser_sheet, cov, out_dir)
 
 
