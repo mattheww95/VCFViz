@@ -65,6 +65,9 @@ class Argparser:
             if len(self.args) == 1:
                 parser.print_help()
                 exit(-1)
+            if len(self.args) == 2:
+                parser.print_help()
+                exit(-1)
             function_to_call = self.args[1]
             self.functions_call[function_to_call](**parser_args.__dict__)
     

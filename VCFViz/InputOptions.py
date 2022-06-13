@@ -3,9 +3,12 @@ Handle different input options being either globs, input sheet or specification 
 
 2022-05-30: Matthew Wells
 """
+
 from VCFViz.VCFlogging import VCFLogger as vlog
 from VCFViz.VCFToJson import ReadIvar
+from VCFViz import RenderHTML
 from VCFViz.RenderHTML import VCFDataHTML
+from VCFViz import CoverageData
 from datetime import datetime
 import os
 from VCFViz.CreateExcelReports import HTMLToExcel

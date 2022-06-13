@@ -9,13 +9,13 @@ dependencies:
   - sqlite=3.38.5=h4ff8645_0
   - xz=5.2.5=h7f8727e_1
   - zlib=1.2.11=h166bdaf_1014
+  - pip==21.2.4
   - pip:
     - certifi==2022.5.18.1
     - et-xmlfile==1.1.0
     - numpy==1.22.4
     - openpyxl==3.0.10
     - pandas==1.4.2
-    - pip==21.2.4
     - python-dateutil==2.8.2
     - pytz==2022.1
     - setuptools==61.2.0

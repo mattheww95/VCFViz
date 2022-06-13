@@ -12,7 +12,6 @@ the bam then a dictionary of the values and theyre assigned depths.
 import datetime
 import os
 import glob
-from re import S
 import subprocess
 from typing import List
 from VCFViz.VCFlogging import VCFLogger as vlog
