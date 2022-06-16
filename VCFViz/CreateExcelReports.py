@@ -40,7 +40,7 @@ class HTMLToExcel:
         """
         Read html file and 
         """
-        sample_name = os.path.basename(fp)[:os.path.basename(fp).index("_")]
+        sample_name = os.path.basename(fp)[:os.path.basename(fp).rindex("_")]
         vlog.logger.info(f"Reading HTML data from output file {sample_name}")
         df = pd.read_html(fp)
         samples = [i for i in list(df[0].columns)[1:]]
