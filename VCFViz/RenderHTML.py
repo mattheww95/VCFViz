@@ -240,8 +240,10 @@ class VCFDataHTML:
         plot_data = PlotData(self.vcf_metadata.voc_info[key_val][voic], ivar_data_val, datafile.sample_name, int(depth))
         vcf_data_meta = self.vcf_metadata.voc_info[key_val][voic]
         # to compare indels, vcf parser sheet places ref at front
-        if vcf_data_meta.Type.upper() != "SUB" and vcf_data_meta.Type.upper() != "REV":
-            if vcf_data_meta.Type.upper() == "DEL":
+        compare_type = vcf_data_meta.Type.upper()
+        vlog.logger.debug(f"Compare type: {compare_type}")
+        if compare_type != "SUB" and compare_type != "REV":
+            if compare_type == "DEL":
                 # splitting string to rwmove first char as in vcfparser
                 # we include the ref codon and ivar includes a starting -
                 ivar_del = ivar_data_val.ALT[1:] 
@@ -252,7 +254,7 @@ class VCFDataHTML:
                     return False
                 else:
                     html_plots_obj[key_val][voic].append(plot_data)
-            elif vcf_data_meta.Type.upper() == "INS":
+            elif compare_type == "INS":
                 ivar_ins = ivar_data_val.ALT[1:]
                 meta_ins = vcf_data_meta.Alt[1:]
                 test = ivar_ins == meta_ins
@@ -261,7 +263,7 @@ class VCFDataHTML:
                     return False
                 else:
                     html_plots_obj[key_val][voic].append(plot_data)
-            elif vcf_data_meta.Type.upper() == "MNP":
+            elif compare_type == "MNP":
                 #TODO move cv into static methods
                 meta_alt = vcf_data_meta.Alt
                 l_meta_alt = len(meta_alt)
@@ -306,7 +308,7 @@ class VCFDataHTML:
                     return False
 
             else:
-                vlog.logger.warning(f"Support not provided for mutation type {vcf_data_meta.Type.upper()}")
+                vlog.logger.warning(f"Support not provided for mutation type {vcf_data_meta.Type}")
                 return False
         else:
             test_alt = vcf_data_meta.Alt == ivar_data_val.ALT
