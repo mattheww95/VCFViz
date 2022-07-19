@@ -1,3 +1,4 @@
+#! /usr/bin/env python3
 """
 Parse the command line parameters and pass them to the program. Dispatch
 the right args to the right function.
@@ -82,7 +83,7 @@ def run_main():
     run1()
 
 if __name__ == "__main__":
-    run_main(sys.argv)
+    run_main()
     #test_sub_sheet = "tests/test_vcfparser_subsheet_.txt"
     #test_metadata_sheet = "tests/VCFParser_tester.txt"
     #cov_thresh = 30
