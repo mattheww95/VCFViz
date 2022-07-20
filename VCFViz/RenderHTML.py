@@ -71,6 +71,7 @@ class PlotData(NamedTuple):
     ivar_row: IvarFields
     sample_name: str
     sample_depth: int = None
+    colour_palette: str = "CSS_colours_alt"
 
 class VCFDataHTML:
 
@@ -122,7 +123,7 @@ class VCFDataHTML:
       z-index: 1; /*  Stay on top */
       top: 0; /* Stay at the top */
       left: 0;
-      background-color: #111; /* Black */
+      background-color: olive; 
       overflow-x: hidden; /* Disable horizontal scroll */
       font-family: \"Arial\";
       padding-top: 20px;
@@ -135,7 +136,7 @@ class VCFDataHTML:
       padding: 6px 8px 6px 16px;
       text-decoration: none;
       font-size: 80px;
-      color: coral;
+      color: goldenrod;
       display: block;
     }
     .main {
@@ -159,20 +160,26 @@ class VCFDataHTML:
     header_tags = ["<th>", "</th>"]
     info_header_tag = ["<h1>", "</h1>"]
     table_tags = ("<table style=\"border:1px solid black;margin-left: 0px\">", "</table>")
-    CSS_colours = ["#DEEDCF",
-                    "#BFE1B0",
-                    "#99D492",
-                    "#74C67A",
-                    "#56B870",
-                    "#39A96B",
-                    "#1D9A6C",
-                    "#188977",
-                    "#137177",
-                    "#0E4D64",
-                    "#0A2F51",
-                    ]
-    css_text_colour = "coral"
 
+    colour_pals = {
+        "CSS_colours_alt": ["#DEEDCF", "#BFE1B0", "#99D492", "#74C67A", "#56B870", "#39A96B", "#1D9A6C", "#188977", "#137177", "#0E4D64", "#0A2F51"],
+        "CSS_colours_rev": [
+            "#C7C8C3",
+            "#B3B5AD", 
+            "#9EA198",
+            "#8A8E82",
+            "#757A6D",
+            "#606658",
+            "#565A4D",
+            "#4C4D42",
+            "#404037",
+            "#34322C",   
+            "#272521"   
+        ]
+    }
+
+    css_text_colour = "coral"
+    
     def __init__(self, ivar_data: List[ReadIvar], vcf_parser_sheet: str, search_dir: str, cov_thresh: int, out_dir: str, prep_cov_data = None) -> None:
         """
         TODO: have flag for coverage info so that it can run without it
@@ -215,19 +222,43 @@ class VCFDataHTML:
                     html_plots[key][voc] = []
                 ivar_data = datafile.vcf_info.get(pos)
                 sample_name = datafile.sample_name
+                
+                # Inverted if statement to be able to handle reversions as they will always be empty
+                alt = self.vcf_metadata.voc_info[key][voc].Alt
+                ref = self.vcf_metadata.voc_info[key][voc].Ref
+
+                
                 # add in coverage check here
                 depth = self.cov_info.samples_coverage[datafile.sample_name][self.vcf_metadata.voc_info[key][voc].Position]
                 empty_data = PlotData(self.vcf_metadata.voc_info[key][voc], None, sample_name, int(depth))
+                compare_type = self.vcf_metadata.voc_info[key][voc].Type.upper()
 
-                if ivar_data is None:
-                    vlog.logger.debug(f"The no data found VOC {key} mutations {voc}")
-                    html_plots[key][voc].append(empty_data)
-                else:
+                if (alt == ref) or ivar_data is not None:
                     start_len = len(html_plots[key][voc])
-                    for i in ivar_data:
-                        ret_val = self.append_ivar_info(html_plots, i, key, voc, datafile)
+                    ret_val = True
+                    #TODO This logic can definately be cleaned up
+                    if ivar_data is not None and compare_type != "REV":
+                        for i in ivar_data:
+                            ret_val = self.append_ivar_info(html_plots, i, key, voc, datafile)
+                    
+                    elif compare_type == "REV" and ivar_data is not None and alt == ref:
+                        rev_alt_freq = 1.00
+                        for data in ivar_data:
+                            rev_alt_freq = rev_alt_freq - float(data.ALT_FREQ)
+                            
+                        rev_plot_data = PlotData(self.vcf_metadata.voc_info[key][voc], 
+                        IvarFields(ALT_FREQ=rev_alt_freq, POS=pos, REF=ref, ALT=alt), sample_name, int(depth), 
+                        colour_palette="CSS_colours_rev")
+                        html_plots[key][voc].append(rev_plot_data)
+                    else:
+                        ret_val = False
+
                     if not ret_val and len(html_plots[key][voc]) == start_len:
                         html_plots[key][voc].append(empty_data) # add empty value if data could not be found
+                else:
+                    vlog.logger.debug(f"The no data found VOC {key} mutations {voc}")
+                    html_plots[key][voc].append(empty_data)
+                    
         return html_plots
     
     def append_ivar_info(self, html_plots_obj: dict, ivar_data_val, key_val, voic, datafile):
@@ -241,8 +272,7 @@ class VCFDataHTML:
         vcf_data_meta = self.vcf_metadata.voc_info[key_val][voic]
         # to compare indels, vcf parser sheet places ref at front
         compare_type = vcf_data_meta.Type.upper()
-        vlog.logger.debug(f"Compare type: {compare_type}")
-        if compare_type != "SUB" and compare_type != "REV":
+        if compare_type != "SUB":
             if compare_type == "DEL":
                 # splitting string to rwmove first char as in vcfparser
                 # we include the ref codon and ivar includes a starting -
@@ -263,6 +293,7 @@ class VCFDataHTML:
                     return False
                 else:
                     html_plots_obj[key_val][voic].append(plot_data)
+
             elif compare_type == "MNP":
                 #TODO move cv into static methods
                 meta_alt = vcf_data_meta.Alt
@@ -298,15 +329,14 @@ class VCFDataHTML:
                 plot_data = plot_data._replace(ivar_row = plot_data.ivar_row._replace(ALT_FREQ = alt_avg))
                 plot_data = plot_data._replace(ivar_row = plot_data.ivar_row._replace(ALT = vcf_data_meta.Alt))
                 plot_data = plot_data._replace(ivar_row = plot_data.ivar_row._replace(REF = vcf_data_meta.Ref))
-                # CV thresholds are set arbitralily, and should reflect the depth
-                cov_var = 2.5
+                
+                cov_var = 2.5 # CV thresholds are set arbitralily currently, but if the future should reflect the depth
                 if depths_cv < cov_var and alt_cv < cov_var: # TODO make this calculated based on depth
                     vlog.logger.info(f"Combining {alleles} at position {meta_pos} into MNP")
                     html_plots_obj[key_val][voic].append(plot_data)
                 else:
                     vlog.logger.info(f"Could not combine mutations for {voic} due to a Coefficient of Variation greater than {cov_var}.")
                     return False
-
             else:
                 vlog.logger.warning(f"Support not provided for mutation type {vcf_data_meta.Type}")
                 return False
@@ -335,8 +365,8 @@ class VCFDataHTML:
         Run the code to create the heatmaps from the intialized data sheets
         """
         figure_data = self.figure_data
-        #side_bar_nav = [self.side_bar_nav[0]]
-        for data in figure_data.keys():
+     
+        for data in figure_data:
             html_figure = [self.html_meta_start, f"<h1>{data}</h1>", self.table_tags[0],"<thead>",self.row_tags[0], 
             self.header_tags[0] + "" + self.header_tags[1]]
 
@@ -349,7 +379,7 @@ class VCFDataHTML:
             html_figure.extend(val_headers)
             html_figure.append("</thead>")
 
-            for voic in voic_data.keys(): # add figure data
+            for voic in voic_data: # add figure data
                 html_figure.append("<tr style=\"height:200px;width:50px\">")
                 col_name = voic_data[voic][0].metadata.AAName + "|" + voic_data[voic][0].metadata.NucName # getting first value for row name
                 html_figure.append("<td style=\"font-weight: 600;padding: 10px;font-size:50px;\">" + col_name + self.td_tags[1])
@@ -360,7 +390,7 @@ class VCFDataHTML:
                         colour_css = "#ffffff"
                         if vcf_row.sample_depth >= self.low_cov_thresh:
                             alt_freq = str(round(float(vcf_row.ivar_row.ALT_FREQ), 3)) # get alt freq col
-                            colour_css = self.CSS_colours[self.pick_colour(alt_freq=alt_freq)] # get index based on colur scale
+                            colour_css = self.colour_pals[vcf_row.colour_palette][self.pick_colour(alt_freq=alt_freq)] # get index based on colur scale
 
                         row_data = f"<td bgcolor={colour_css} style=\"color:{self.css_text_colour};font-weight: 600;padding: 10px;font-size:50px\">"
                         row_info.append(row_data + alt_freq + self.td_tags[1])
@@ -461,7 +491,7 @@ class VCFDataHTML:
             alt_freq = self.ivar_data.vcf_info[key][0].ALT_FREQ # get alt freq col
             # below colour logic can be altered to scale with colours and mathmatically cleaner
             colour_css = int(float(alt_freq) * 10) # get index based on colur scale
-            row_data = f"<td bgcolor={self.CSS_colours[colour_css]} style=\"color:red;\">"
+            row_data = f"<td bgcolor={self.CSS_colours_alt[colour_css]} style=\"color:red;\">"
             row_info.append(row_data + alt_freq + self.td_tags[1])
             row_info.append(self.row_tags[1])
 

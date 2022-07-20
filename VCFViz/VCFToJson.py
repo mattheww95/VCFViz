@@ -140,25 +140,25 @@ class ReadVCF:
                     getattr(self.header_info, type_line.upper())[vals_format["ID"]] = FlagDescriptors(**vals_format)
                     
 class IvarFields(NamedTuple):
-        REGION: str
-        POS: str
-        REF: str
-        ALT: str
-        REF_DP: str
-        REF_RV: str
-        REF_QUAL: str
-        ALT_DP: str
-        ALT_RV: str
-        ALT_QUAL: str
-        ALT_FREQ: str
-        TOTLA_DP: str
-        PVAL: str
-        PASS: str
-        GFF_FEATURE: str
-        REF_CODON: str
-        REF_AA: str
-        ALT_CODON: str
-        ALT_AA: str
+        REGION: str = None
+        POS: str = None
+        REF: str = None
+        ALT: str = None
+        REF_DP: str = None
+        REF_RV: str = None
+        REF_QUAL: str = None
+        ALT_DP: str = None
+        ALT_RV: str = None
+        ALT_QUAL: str = None
+        ALT_FREQ: str = None
+        TOTAL_DP: str = None
+        PVAL: str = None
+        PASS: str = None
+        GFF_FEATURE: str = None
+        REF_CODON: str = None
+        REF_AA: str = None
+        ALT_CODON: str = None
+        ALT_AA: str = None
 
 
 
@@ -205,7 +205,7 @@ class ReadIvar:
                 # Checking if ivar position is empty as I beleive ivar provided multiple
                 # entries for the mutations at the same mutation
                 if self.vcf_info.get(ivar_row.POS) is None:
-                    self.vcf_info[ivar_row.POS] = []
+                    self.vcf_info[ivar_row.POS] = list()
                     self.vcf_info[ivar_row.POS].append(ivar_row)
                 else:
                     self.vcf_info[ivar_row.POS].append(ivar_row)
