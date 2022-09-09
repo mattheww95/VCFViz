@@ -10,6 +10,7 @@ then install the program with pip install . (Make sure your in the setup directo
 - Add average to heat map of altfreq
 - Add selcted average to heat map of altfreq for mutations toggled to true input sheet
 - Highlight selected mutations based off of input sheet markup
+- When same mutations is listed in the same lineage one is dropped
 
 # Run
 To run:
