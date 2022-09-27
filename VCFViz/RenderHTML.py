@@ -12,12 +12,9 @@ import glob
 from typing import NamedTuple, List
 import os
 from VCFViz import CoverageData
-from VCFViz.VCFToJson import ReadIvar, ReadVCF, IvarFields
+from VCFViz.VCFToJson import ReadIvar, ReadVCF, IvarFields, VariantData
 from VCFViz.VCFlogging import VCFLogger as vlog
 import statistics
-
-
-
 
 class VCFParserRow(NamedTuple):
         PangoLineage: str
@@ -62,7 +59,7 @@ class DataSheet:
                 voc_metadata = VCFParserRow(*line[1:])
                 if voc_info.get(voc) is None:
                     voc_info[voc] = {}
-                
+                # multiple optoins to be listed at the same site in the future
                 voc_info[voc][f"{voc_metadata.Ref}{voc_metadata.Position}{voc_metadata.Alt}"] = voc_metadata
         return voc_info
 
@@ -123,7 +120,7 @@ class VCFDataHTML:
       z-index: 1; /*  Stay on top */
       top: 0; /* Stay at the top */
       left: 0;
-      background-color: olive; 
+      background-color: black; 
       overflow-x: hidden; /* Disable horizontal scroll */
       font-family: \"Arial\";
       padding-top: 20px;
@@ -188,7 +185,7 @@ class VCFDataHTML:
         """
         self.out_dir = out_dir
         self.vcfparser_sheet = vcf_parser_sheet
-        self.low_cov_thresh = cov_thresh #TODO make this a param in cmd line
+        self.low_cov_thresh = cov_thresh
         self.indx_samples = {i.sample_name: i for i in ivar_data}
         if prep_cov_data == None:
             self.cov_info = CoverageData.create_sample_coverages([i.sample_name for i in ivar_data], search_dir)
@@ -217,6 +214,7 @@ class VCFDataHTML:
 
             for voc in self.vcf_metadata.voc_info[key]:
                 #TODO double value addition is probably happening here
+                #TODO collisions are occurning due to the same position being referenced more than once
                 pos = "".join([i for i in voc if i.isdigit()])
                 if html_plots[key].get(voc) is None:
                     html_plots[key][voc] = []
