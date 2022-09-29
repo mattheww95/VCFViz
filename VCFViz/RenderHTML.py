@@ -11,10 +11,17 @@ from datetime import datetime
 import glob
 from typing import NamedTuple, List
 import os
-from VCFViz import CoverageData
-from VCFViz.VCFToJson import ReadIvar, ReadVCF, IvarFields, VariantData
-from VCFViz.VCFlogging import VCFLogger as vlog
 import statistics
+
+try:
+    from VCFViz import CoverageData
+    from VCFViz.VCFToJson import ReadIvar, ReadVCF, IvarFields, VariantData, CommonVCF
+    from VCFViz.VCFlogging import VCFLogger as vlog
+except ImportError:
+    import CoverageData
+    from VCFToJson import ReadIvar, ReadVCF, IvarFields, VariantData, CommonVCF
+    from VCFlogging import VCFLogger as vlog
+
 
 class VCFParserRow(NamedTuple):
         PangoLineage: str
@@ -65,7 +72,7 @@ class DataSheet:
 
 class PlotData(NamedTuple):
     metadata: VCFParserRow
-    ivar_row: IvarFields
+    vcf_data: CommonVCF
     sample_name: str
     sample_depth: int = None
     colour_palette: str = "CSS_colours_alt"
@@ -177,27 +184,28 @@ class VCFDataHTML:
 
     css_text_colour = "coral"
     
-    def __init__(self, ivar_data: List[ReadIvar], vcf_parser_sheet: str, search_dir: str, cov_thresh: int, out_dir: str, prep_cov_data = None) -> None:
+    def __init__(self, variant_data: VariantData, vcf_parser_sheet: str, search_dir: str, cov_thresh: int, out_dir: str, prep_cov_data = None) -> None:
         """
         TODO: have flag for coverage info so that it can run without it
         Can be done better for handing off data, but just to rush out a prototype, e.g. not just ivar specific
         prep_cov_data: is a parameter to be added in the case of preprocessed data is provided
         """
+        self.var_data = variant_data.variant_data
         self.out_dir = out_dir
         self.vcfparser_sheet = vcf_parser_sheet
         self.low_cov_thresh = cov_thresh
-        self.indx_samples = {i.sample_name: i for i in ivar_data}
+        self.indx_samples = {i: self.var_data[i] for i in self.var_data}
         if prep_cov_data == None:
-            self.cov_info = CoverageData.create_sample_coverages([i.sample_name for i in ivar_data], search_dir)
+            self.cov_info = CoverageData.create_sample_coverages([i for i in self.var_data], search_dir)
         else:
             self.cov_info = prep_cov_data
         self.vcf_metadata = DataSheet(vcf_parser_sheet)
         #self.voc_table_data = self.initialize_voc_tables()
-        self.ivar_data = ivar_data
+        self.var_data = self.var_data
         self.figure_data = {}
-        for data in self.ivar_data:
+        for data in self.var_data:
             # modifies figure data obj in place, adding in data for figures
-            self.figure_data = self.initialize_voc_tables(data, self.figure_data)
+            self.figure_data = self.initialize_voc_tables(self.var_data[data], self.figure_data)
         self.create_heatmaps()
     
     def initialize_voc_tables(self, datafile, html_plots: dict):
@@ -215,62 +223,67 @@ class VCFDataHTML:
             for voc in self.vcf_metadata.voc_info[key]:
                 #TODO double value addition is probably happening here
                 #TODO collisions are occurning due to the same position being referenced more than once
-                pos = "".join([i for i in voc if i.isdigit()])
+                pos = int("".join([i for i in voc if i.isdigit()]))
                 if html_plots[key].get(voc) is None:
                     html_plots[key][voc] = []
-                ivar_data = datafile.vcf_info.get(pos)
-                sample_name = datafile.sample_name
-                
-                # Inverted if statement to be able to handle reversions as they will always be empty
-                alt = self.vcf_metadata.voc_info[key][voc].Alt
-                ref = self.vcf_metadata.voc_info[key][voc].Ref
+                #ivar_data = datafile.vcf_info.get(pos)
+                ivar_data = datafile.get(pos)
+                if ivar_data is not None:
+                    for dat in ivar_data:
+                        sample_name = dat.sample_name
+                        
+                        # Inverted if statement to be able to handle reversions as they will always be empty
+                        alt = self.vcf_metadata.voc_info[key][voc].Alt
+                        ref = self.vcf_metadata.voc_info[key][voc].Ref
+                        
+                        # add in coverage check here
+                        depth = self.cov_info.samples_coverage[sample_name][self.vcf_metadata.voc_info[key][voc].Position]
+                        empty_data = PlotData(self.vcf_metadata.voc_info[key][voc], None, sample_name, int(depth))
+                        compare_type = self.vcf_metadata.voc_info[key][voc].Type.upper()
 
-                
-                # add in coverage check here
-                depth = self.cov_info.samples_coverage[datafile.sample_name][self.vcf_metadata.voc_info[key][voc].Position]
-                empty_data = PlotData(self.vcf_metadata.voc_info[key][voc], None, sample_name, int(depth))
-                compare_type = self.vcf_metadata.voc_info[key][voc].Type.upper()
-
-                if (alt == ref) or ivar_data is not None:
-                    start_len = len(html_plots[key][voc])
-                    ret_val = True
-                    #TODO This logic can definately be cleaned up
-                    if ivar_data is not None and compare_type != "REV":
-                        for i in ivar_data:
-                            ret_val = self.append_ivar_info(html_plots, i, key, voc, datafile)
-                    
-                    elif compare_type == "REV" and ivar_data is not None and alt == ref:
-                        rev_alt_freq = 1.00
-                        for data in ivar_data:
-                            rev_alt_freq = rev_alt_freq - float(data.ALT_FREQ)
+                        if (alt == ref) or ivar_data is not None:
+                            start_len = len(html_plots[key][voc])
+                            ret_val = True
+                            #TODO This logic can definately be cleaned up
+                            if ivar_data is not None and compare_type != "REV":
+                                for i in ivar_data:
+                                    ret_val = self.append_ivar_info(html_plots, i, key, voc, sample_name)
                             
-                        rev_plot_data = PlotData(self.vcf_metadata.voc_info[key][voc], 
-                        IvarFields(ALT_FREQ=rev_alt_freq, POS=pos, REF=ref, ALT=alt), sample_name, int(depth), 
-                        colour_palette="CSS_colours_rev")
-                        html_plots[key][voc].append(rev_plot_data)
-                    else:
-                        ret_val = False
+                            elif compare_type == "REV" and ivar_data is not None and alt == ref:
+                                rev_alt_freq = 1.00
+                                for data in ivar_data:
+                                    rev_alt_freq = rev_alt_freq - float(data.ALT_FREQ)
+                                    
+                                rev_plot_data = PlotData(self.vcf_metadata.voc_info[key][voc], 
+                                IvarFields(ALT_FREQ=rev_alt_freq, POS=pos, REF=ref, ALT=alt), sample_name, int(depth), 
+                                colour_palette="CSS_colours_rev")
+                                html_plots[key][voc].append(rev_plot_data)
+                            else:
+                                ret_val = False
 
-                    if not ret_val and len(html_plots[key][voc]) == start_len:
-                        html_plots[key][voc].append(empty_data) # add empty value if data could not be found
+                            if not ret_val and len(html_plots[key][voc]) == start_len:
+                                html_plots[key][voc].append(empty_data) # add empty value if data could not be found
+                        else:
+                            vlog.logger.debug(f"The no data found VOC {key} mutations {voc}")
+                            html_plots[key][voc].append(empty_data)
                 else:
                     vlog.logger.debug(f"The no data found VOC {key} mutations {voc}")
                     html_plots[key][voc].append(empty_data)
-                    
+                            
         return html_plots
     
-    def append_ivar_info(self, html_plots_obj: dict, ivar_data_val, key_val, voic, datafile):
+    def append_ivar_info(self, html_plots_obj: dict, ivar_data_val, key_val, voic, sample_name):
         """
         As ivar data contains a list of values, a for loop is required to run through the data 
         of tuples to identify other postitions. No return value is specified as the dictionary will be mutatated in place
         """
         
-        depth = self.cov_info.samples_coverage[datafile.sample_name][self.vcf_metadata.voc_info[key_val][voic].Position]
-        plot_data = PlotData(self.vcf_metadata.voc_info[key_val][voic], ivar_data_val, datafile.sample_name, int(depth))
+        depth = self.cov_info.samples_coverage[sample_name][self.vcf_metadata.voc_info[key_val][voic].Position]
+        plot_data = PlotData(self.vcf_metadata.voc_info[key_val][voic], ivar_data_val, sample_name, int(depth))
         vcf_data_meta = self.vcf_metadata.voc_info[key_val][voic]
         # to compare indels, vcf parser sheet places ref at front
         compare_type = vcf_data_meta.Type.upper()
-        if compare_type != "SUB":
+        if compare_type != "SNP" and compare_type != "MNP": 
             if compare_type == "DEL":
                 # splitting string to rwmove first char as in vcfparser
                 # we include the ref codon and ivar includes a starting -
@@ -291,50 +304,50 @@ class VCFDataHTML:
                     return False
                 else:
                     html_plots_obj[key_val][voic].append(plot_data)
+            # Commenting out MNPS as freebayes includes them
+            #elif compare_type == "MNP":
+            #    #TODO move cv into static methods
+            #    meta_alt = vcf_data_meta.Alt
+            #    l_meta_alt = len(meta_alt)
+            #    meta_pos = int(vcf_data_meta.Position)
+            #    mnps_add = []
+            #    if ivar_data_val.ALT != meta_alt[0]:
+            #        return False
 
-            elif compare_type == "MNP":
-                #TODO move cv into static methods
-                meta_alt = vcf_data_meta.Alt
-                l_meta_alt = len(meta_alt)
-                meta_pos = int(vcf_data_meta.Position)
-                mnps_add = []
-                if ivar_data_val.ALT != meta_alt[0]:
-                    return False
+            #    mnps_add.append(ivar_data_val)
+            #    for i in range(1, l_meta_alt):# skip ivar dataval
+            #        pos_test = datafile.vcf_info.get(str(meta_pos + i))
+            #        for vcf_val in pos_test: # test one vcfval at a time alter this later
+            #            if vcf_val.ALT == meta_alt[i]:
+            #                mnps_add.append(vcf_val)
+            #    
+            #    # Quick lil CV test for the mnps to make sure the occur together
+            #    # NOTE: this is based on my faith and not empircical measures
+            #    alleles = "".join([i.ALT for i in mnps_add])
+            #    if alleles != meta_alt:
+            #        return False
+            #    depths = [int(i.ALT_DP) for i in mnps_add]
+            #    d_stdev = statistics.pstdev(depths)
+            #    d_avg = statistics.mean(depths)
+            #    depths_cv = (d_stdev / d_avg) * 100
 
-                mnps_add.append(ivar_data_val)
-                for i in range(1, l_meta_alt):# skip ivar dataval
-                    pos_test = datafile.vcf_info.get(str(meta_pos + i))
-                    for vcf_val in pos_test: # test one vcfval at a time alter this later
-                        if vcf_val.ALT == meta_alt[i]:
-                            mnps_add.append(vcf_val)
-                
-                # Quick lil CV test for the mnps to make sure the occur together
-                # NOTE: this is based on my faith and not empircical measures
-                alleles = "".join([i.ALT for i in mnps_add])
-                if alleles != meta_alt:
-                    return False
-                depths = [int(i.ALT_DP) for i in mnps_add]
-                d_stdev = statistics.pstdev(depths)
-                d_avg = statistics.mean(depths)
-                depths_cv = (d_stdev / d_avg) * 100
-
-                alt_freqs = [float(i.ALT_FREQ) for i in mnps_add]
-                altf_stdev = statistics.pstdev(alt_freqs)
-                alt_avg = statistics.mean(alt_freqs)
-                alt_cv = (altf_stdev / alt_avg) * 100
-                #Change the ivar row in the data to show the average for the mnps
-                
-                plot_data = plot_data._replace(ivar_row = plot_data.ivar_row._replace(ALT_FREQ = alt_avg))
-                plot_data = plot_data._replace(ivar_row = plot_data.ivar_row._replace(ALT = vcf_data_meta.Alt))
-                plot_data = plot_data._replace(ivar_row = plot_data.ivar_row._replace(REF = vcf_data_meta.Ref))
-                
-                cov_var = 2.5 # CV thresholds are set arbitralily currently, but if the future should reflect the depth
-                if depths_cv < cov_var and alt_cv < cov_var: # TODO make this calculated based on depth
-                    vlog.logger.info(f"Combining {alleles} at position {meta_pos} into MNP")
-                    html_plots_obj[key_val][voic].append(plot_data)
-                else:
-                    vlog.logger.info(f"Could not combine mutations for {voic} due to a Coefficient of Variation greater than {cov_var}.")
-                    return False
+            #    alt_freqs = [float(i.ALT_FREQ) for i in mnps_add]
+            #    altf_stdev = statistics.pstdev(alt_freqs)
+            #    alt_avg = statistics.mean(alt_freqs)
+            #    alt_cv = (altf_stdev / alt_avg) * 100
+            #    #Change the ivar row in the data to show the average for the mnps
+            #    
+            #    plot_data = plot_data._replace(ivar_row = plot_data.vcf_data._replace(ALT_FREQ = alt_avg))
+            #    plot_data = plot_data._replace(ivar_row = plot_data.vcf_data._replace(ALT = vcf_data_meta.Alt))
+            #    plot_data = plot_data._replace(ivar_row = plot_data.vcf_data._replace(REF = vcf_data_meta.Ref))
+            #    
+            #    cov_var = 2.5 # CV thresholds are set arbitralily currently, but if the future should reflect the depth
+            #    if depths_cv < cov_var and alt_cv < cov_var: # TODO make this calculated based on depth
+            #        vlog.logger.info(f"Combining {alleles} at position {meta_pos} into MNP")
+            #        html_plots_obj[key_val][voic].append(plot_data)
+            #    else:
+            #        vlog.logger.info(f"Could not combine mutations for {voic} due to a Coefficient of Variation greater than {cov_var}.")
+            #        return False
             else:
                 vlog.logger.warning(f"Support not provided for mutation type {vcf_data_meta.Type}")
                 return False
@@ -363,12 +376,13 @@ class VCFDataHTML:
         Run the code to create the heatmaps from the intialized data sheets
         """
         figure_data = self.figure_data
-     
         for data in figure_data:
             html_figure = [self.html_meta_start, f"<h1>{data}</h1>", self.table_tags[0],"<thead>",self.row_tags[0], 
             self.header_tags[0] + "" + self.header_tags[1]]
 
             voic_data = figure_data[data]
+            #print(data)
+            #print(voic_data)
             positions = list(voic_data.keys())
 
             # replaceing header tags for samples only
@@ -378,16 +392,18 @@ class VCFDataHTML:
             html_figure.append("</thead>")
 
             for voic in voic_data: # add figure data
+                #print(voic_data[voic][0].metadata)
                 html_figure.append("<tr style=\"height:200px;width:50px\">")
+                #print(voic_data[voic])
                 col_name = voic_data[voic][0].metadata.AAName + "|" + voic_data[voic][0].metadata.NucName # getting first value for row name
                 html_figure.append("<td style=\"font-weight: 600;padding: 10px;font-size:50px;\">" + col_name + self.td_tags[1])
                 for vcf_row in voic_data[voic]:
                     row_info = []
-                    if vcf_row.ivar_row is not None:
+                    if vcf_row.vcf_data is not None:
                         alt_freq = "LC"
                         colour_css = "#ffffff"
                         if vcf_row.sample_depth >= self.low_cov_thresh:
-                            alt_freq = str(round(float(vcf_row.ivar_row.ALT_FREQ), 3)) # get alt freq col
+                            alt_freq = str(round(float(vcf_row.vcf_data.ALT_DEPTH) / float(vcf_row.vcf_data.TOTAL_DEPTH), 3)) # get alt freq col
                             colour_css = self.colour_pals[vcf_row.colour_palette][self.pick_colour(alt_freq=alt_freq)] # get index based on colur scale
 
                         row_data = f"<td bgcolor={colour_css} style=\"color:{self.css_text_colour};font-weight: 600;padding: 10px;font-size:50px\">"
@@ -397,9 +413,10 @@ class VCFDataHTML:
                         #TODO preprocess this to speed it up
                         #TODO make logic prepared for mixture of wildtype and alternate
                         #TODO need to add in flag for reversions to show up
-                        
                         sample_data = self.determine_sample(vcf_row.sample_name)
-                        val = sample_data.vcf_info.get(vcf_row.metadata.Position)
+                        #print(sample_data.get(vcf_row.metadata.Position))
+                        #val = sample_data.vcf_info.get(vcf_row.metadata.Position)
+                        val = sample_data.get(vcf_row.metadata.Position)
                         empt_flag = "WT"
                         if val is not None:
                             empt_flag = "ALT"
@@ -478,15 +495,15 @@ class VCFDataHTML:
         """
         header_cols = [self.html_meta_start, self.table_tags[0], self.row_tags[0],
         self.header_tags[0] + "POS" + self.header_tags[1], 
-        self.header_tags[0] + self.ivar_data.sample_name + self.header_tags[1],
+        self.header_tags[0] + self.var_data.sample_name + self.header_tags[1],
         self.row_tags[1]]
         row_info = []
-        for key in self.ivar_data.vcf_info.keys():
+        for key in self.var_data.vcf_info.keys():
             row_info.append(self.row_tags[0]) # append in row delimeters
             row_info.append(self.td_tags[0] + key + self.td_tags[1])
             # need to assign some logic to tags below
             row_data = self.td_tags[0] # add Make copy to add css to tag
-            alt_freq = self.ivar_data.vcf_info[key][0].ALT_FREQ # get alt freq col
+            alt_freq = self.var_data.vcf_info[key][0].ALT_FREQ # get alt freq col
             # below colour logic can be altered to scale with colours and mathmatically cleaner
             colour_css = int(float(alt_freq) * 10) # get index based on colur scale
             row_data = f"<td bgcolor={self.CSS_colours_alt[colour_css]} style=\"color:red;\">"
@@ -502,10 +519,13 @@ class VCFDataHTML:
 
 
 if __name__ == "__main__":
-    ivar_data_ = ReadIvar("tests/22_AB16_GP_0414.tsv")
-    ivar_data2 = ReadIvar("tests/22_WPG17_NE_0426_2.tsv")
+    #ivar_data_ = ReadIvar("tests/22_AB16_GP_0414.tsv")
+    #ivar_data2 = ReadIvar("tests/22_WPG17_NE_0426_2.tsv")
+    variant_data = ["tests/22_AB16_GP_0414.tsv", "tests/22_WPG17_NE_0426_2.tsv"]
     parser_sheet = "tests/VCFParser_20220516.txt"
-    vcf_html = VCFDataHTML([ivar_data2, ivar_data_], "tests/VCFParser_tester.txt", "./tests", 30, "./tests")
+    vcf_dat = [ReadIvar(key) for key in variant_data]
+
+    vcf_html = VCFDataHTML(VariantData(vcf_dat), "tests/VCFParser_tester.txt", "./tests", 30, "./tests")
     vcf_html.combine_html_plots()
     #import InputOptions
     #InputOptions.glob_directories(t_ivar, bam_dir, parser_sheet, cov, out_dir)

@@ -22,12 +22,16 @@ They must be in that order as well.
 
 from collections import namedtuple, defaultdict
 from dataclasses import dataclass
-from VCFlogging import VCFLogger
 from typing import NamedTuple, List
 from enum import Enum, auto
 import sys
 import os
 import glob
+
+try:
+    from VCFViz.VCFlogging import VCFLogger
+except ImportError:
+    from VCFlogging import VCFLogger
 
 
 class MutationTypes(Enum):
@@ -294,13 +298,15 @@ class ReadIvar:
     
 
 class CommonVCF(NamedTuple):
-    SampleName: str
+    #SampleName: str
+    sample_name: str
     CHROM: str
     TYPE: str
     TOTAL_DEPTH: int
     ALT_DEPTH: int
     POS: int
     ALT: str
+    REF: str
 
 
 
@@ -313,6 +319,7 @@ class VariantData:
     variant_data = dict()
     def __init__(self, variants_list) -> None:
         self.variants_list = variants_list
+        # determine to call ReadIvar or ReadVCF
         self.translate_vcf()
     
     def translate_vcf(self):
@@ -350,11 +357,12 @@ class VariantData:
                     pos = int(v.POS)
                     chrom = v.REGION
                     sample = vcf.sample_name
+                    ref = v.REF
                     if self.variant_data.get(sample) is None:
                             self.variant_data[sample] = dict()
                     if self.variant_data[sample].get(pos) is None:
                         self.variant_data[sample][pos] = list()
-                    self.variant_data[sample][pos].append(CommonVCF(sample, chrom, mut_type, total_depth, alt_depth, pos, v.ALT))
+                    self.variant_data[sample][pos].append(CommonVCF(sample, chrom, mut_type, total_depth, alt_depth, pos, v.ALT, ref))
                     
     
     def vcf_translation(self):
@@ -381,7 +389,6 @@ class VariantData:
                             self.variant_data[sample] = dict()
                         if self.variant_data[sample].get(pos) is None:
                             self.variant_data[sample][pos] = list()     
-                        
                         try:
                             if v.INFO["TYPE"].upper() not in {"SNP", "MNP"}:
                                 cigar_trasformed = self.cigar_translation(*cigar_data)
@@ -390,9 +397,9 @@ class VariantData:
                                 for cigar in cigar_trasformed:
                                     alt = cigar[1]
                                     self.variant_data[sample][pos].append(
-                                        CommonVCF(sample, chrom, cigar[2], total_depth, alt_depth, pos, alt))
+                                        CommonVCF(sample, chrom, cigar[2], total_depth, alt_depth, pos, alt, cigar[3]))
                             else:
-                                self.variant_data[sample][pos].append(CommonVCF(sample, chrom, mut_type, total_depth, alt_depth, pos, v.row.ALT))
+                                self.variant_data[sample][pos].append(CommonVCF(sample, chrom, mut_type, total_depth, alt_depth, pos, v.row.ALT, v.row.REF))
                         except ValueError:
                             VCFLogger.logger.critical("Found unhandled situation, multiple variants listed per site")
                             VCFLogger.logger.critical(key)
@@ -456,6 +463,7 @@ class VariantData:
         ref_poses = [ref_pos]
         alt_slices = list()
         for i in cigar:
+      
             alt_slices.append(cigar_operations[i[0]](i[0], i[1], ref, alt, running_pos))
             new_alt += alt_slices[-1]
             ref_pos += position_ops[i[0]](i[0], i[1], ref_pos)
@@ -472,9 +480,7 @@ class VariantData:
         }
         for i in data:
             if i[2] != "M":
-                #print(i[0], f"{variable_tag[i[2]]}{i[1]}")
-                #POS, IVAR FORMAT
-                return_values.append((i[0], f"{variable_tag[i[2]][0]}{i[1]}", variable_tag[i[2]][1]))
+                return_values.append((i[0], f"{variable_tag[i[2]][0]}{i[1]}", variable_tag[i[2]][1], ref))
         return return_values
 
         

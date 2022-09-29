@@ -4,15 +4,36 @@ Handle different input options being either globs, input sheet or specification 
 2022-05-30: Matthew Wells
 """
 
-from VCFViz.VCFlogging import VCFLogger as vlog
-from VCFViz.VCFToJson import ReadIvar
-from VCFViz import RenderHTML
-from VCFViz.RenderHTML import VCFDataHTML
-from VCFViz import CoverageData
+
+
+try:
+    from VCFViz.VCFlogging import VCFLogger as vlog
+    from VCFViz.VCFToJson import ReadIvar, ReadVCF
+    from VCFViz import RenderHTML
+    from VCFViz.RenderHTML import VCFDataHTML
+    from VCFViz import CoverageData
+    from VCFViz.CreateExcelReports import HTMLToExcel
+except ImportError:
+    from VCFlogging import VCFLogger as vlog
+    from VCFToJson import ReadIvar, ReadVCF, VariantData
+    import RenderHTML
+    from RenderHTML import VCFDataHTML
+    import CoverageData
+    from CreateExcelReports import HTMLToExcel
+
+    
 from datetime import datetime
 import os
-from VCFViz.CreateExcelReports import HTMLToExcel
 
+
+def determine_vcf_format(sample_file):
+    """
+    Determine which vcf reader method to use
+    """
+    if sample_file[sample_file.rindex(".")+1:] == "tsv":
+        return (ReadIvar, ".tsv")
+    else:
+        return (ReadVCF, ".vcf")
 
 #Submission sheet input (Retain sample order)
 def process_submission_sheet(sample_sheet: str, metadata: str, coverage_threshold: int, output_directory: str):
@@ -25,6 +46,8 @@ def process_submission_sheet(sample_sheet: str, metadata: str, coverage_threshol
     samples = []
     var_data = []
     sheet_cov_data = []
+    file_reader_method = None
+    glob_string = None
     with open(sample_sheet, 'r') as samples_:
         for i in samples_.readlines():
             val = i.strip().split("\t")
@@ -33,7 +56,8 @@ def process_submission_sheet(sample_sheet: str, metadata: str, coverage_threshol
                 vlog.logger.critical("Specified sheet does not match needed criteria.")
                 vlog.logger.critical("Sheet should be tab delimited and ordered: sample name, vcf path, bam path")
                 exit(-1)
-            ivar_data = ReadIvar(val[1])
+            file_reader_method, glob_string = determine_vcf_format(val[1])
+            ivar_data = file_reader_method(val[1])
             ivar_data.sample_name = val[0]
             var_data.append(ivar_data)
             cov_data = CoverageData.SampleMap(val[0], val[2])
@@ -44,7 +68,7 @@ def process_submission_sheet(sample_sheet: str, metadata: str, coverage_threshol
             #samples_process[val[0]] = (ivar_data, cov_data) # 1: ivardata 2: bam path
     vlog.logger.info(f"Creating coverage data for {len(samples)} samples and outputting data to {output_directory}.")
     sample_cov_data = CoverageData.create_sample_coverages(samples, output_directory, sheet_cov_data)
-    rendered = RenderHTML.VCFDataHTML(var_data, metadata, None, coverage_threshold, output_directory, sample_cov_data)
+    rendered = RenderHTML.VCFDataHTML(VariantData(var_data), metadata, None, coverage_threshold, output_directory, sample_cov_data)
     rendered.combine_html_plots()
 
 #Glob directories
@@ -52,8 +76,12 @@ def glob_directories(ivar_directory:str, bam_directory: str, metadata: str, cove
     """
     The main function to call in prepareing the samples
     """
-    ivar_data = [ReadIvar(os.path.join(ivar_directory, i)) for i in os.listdir(ivar_directory) if os.path.splitext(i)[-1].lower() == ".tsv"]
-    vcf_html = VCFDataHTML(ivar_data, metadata, bam_directory, coverage_threshold, output_directory)
+    file_reader_method = None
+    glob_ext = None
+    #TODO this is a bottle nexk that can be easily eliminated in the future
+    file_reader_method, glob_ext = determine_vcf_format(os.path.join(ivar_directory, os.listdir(ivar_directory)[0]))
+    ivar_data = [file_reader_method(os.path.join(ivar_directory, i)) for i in os.listdir(ivar_directory) if os.path.splitext(i)[-1].lower() == glob_ext]
+    vcf_html = VCFDataHTML(VariantData(ivar_data), metadata, bam_directory, coverage_threshold, output_directory)
     vcf_html.combine_html_plots()
 
 #cmd line sample specification

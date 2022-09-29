@@ -14,7 +14,10 @@ import os
 import glob
 import subprocess
 from typing import List
-from VCFViz.VCFlogging import VCFLogger as vlog
+try:
+    from VCFViz.VCFlogging import VCFLogger as vlog
+except ImportError:
+    from VCFlogging import VCFLogger as vlog
 import json
 
 
