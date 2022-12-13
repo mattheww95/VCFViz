@@ -13,6 +13,7 @@ from typing import NamedTuple, List
 import os
 import statistics
 
+
 try:
     from VCFViz import CoverageData
     from VCFViz.VCFToJson import ReadIvar, ReadVCF, IvarFields, VariantData, CommonVCF
@@ -66,7 +67,7 @@ class DataSheet:
                 voc_metadata = VCFParserRow(*line[1:])
                 if voc_info.get(voc) is None:
                     voc_info[voc] = {}
-                # multiple optoins to be listed at the same site in the future
+                # multiple options to be listed at the same site in the future
                 voc_info[voc][f"{voc_metadata.Ref}{voc_metadata.Position}{voc_metadata.Alt}"] = voc_metadata
         return voc_info
 
@@ -192,6 +193,7 @@ class VCFDataHTML:
         """
         self.var_data = variant_data.variant_data
         self.out_dir = out_dir
+        self.samples_amount = len(variant_data.samples)
         self.vcfparser_sheet = vcf_parser_sheet
         self.low_cov_thresh = cov_thresh
         self.indx_samples = {i: self.var_data[i] for i in self.var_data}
@@ -205,10 +207,37 @@ class VCFDataHTML:
         self.figure_data = {}
         for data in self.var_data:
             # modifies figure data obj in place, adding in data for figures
-            self.figure_data = self.initialize_voc_tables(self.var_data[data], self.figure_data)
+            self.figure_data = self.initialize_voc_tables(self.var_data[data], self.figure_data, data)
+        vlog.logger.info("Checking for concordance between number of VCF entries per a position and the number of samples input.")
+        self.check_numbers_valid(variant_data)
         self.create_heatmaps()
-    
-    def initialize_voc_tables(self, datafile, html_plots: dict):
+
+    def check_numbers_valid(self, variant_data):
+        """
+        Check that there are not more entries of each vcf for each voc to be displayed
+        """
+        to_exit = False
+        for i in self.figure_data:
+            for f in self.figure_data[i]:
+                if self.samples_amount != len(self.figure_data[i][f]):
+                    vlog.logger.critical("Number of samples does not match number of VCF entries.")
+                    vlog.logger.critical(f"Samples: {self.samples_amount} VCF Entries: {len(self.figure_data[i][f])}")
+                    grouping_data = {k: dict() for k in variant_data.samples}
+                    for h in self.figure_data[i][f]:
+                        if grouping_data[h.sample_name].get(h) is None:
+                            grouping_data[h.sample_name][h] = 0
+                        grouping_data[h.sample_name][h] += 1
+                    for k, v in grouping_data.items():
+                        value = len(v)
+                        exit(-1)
+                        if value > 1:
+                            #vlog.logger.debug(f"{k} is repeated {v} times")
+                            ...
+                    to_exit = True
+        if to_exit:
+            exit(-1)
+                
+    def initialize_voc_tables(self, datafile, html_plots: dict, sample_name):
         """
         From the vcf metadata initialize a dictionary for each voc that can show a queried postion,
         and can be grabbed from the vcf_data
@@ -216,58 +245,62 @@ class VCFDataHTML:
         TODO: methods can be divided and mutations cleaned with gaurd statements
         """
 
-        for key in self.vcf_metadata.voc_info.keys():
+        for key in self.vcf_metadata.voc_info:
             if html_plots.get(key) is None:
-                html_plots[key] = {}
+                html_plots[key] = dict()
 
             for voc in self.vcf_metadata.voc_info[key]:
-                #TODO double value addition is probably happening here
                 #TODO collisions are occurning due to the same position being referenced more than once
                 pos = int("".join([i for i in voc if i.isdigit()]))
                 if html_plots[key].get(voc) is None:
-                    html_plots[key][voc] = []
-                #ivar_data = datafile.vcf_info.get(pos)
+                    html_plots[key][voc] = list()
+
                 ivar_data = datafile.get(pos)
+                depth = self.cov_info.samples_coverage[sample_name][str(pos)]
+                empty_data = PlotData(self.vcf_metadata.voc_info[key][voc], None, sample_name, int(depth))
                 if ivar_data is not None:
+                    #TODO rearrange key, position so sample name is passed in a reference
+                    ret_val = False
                     for dat in ivar_data:
                         sample_name = dat.sample_name
-                        
                         # Inverted if statement to be able to handle reversions as they will always be empty
                         alt = self.vcf_metadata.voc_info[key][voc].Alt
                         ref = self.vcf_metadata.voc_info[key][voc].Ref
-                        
-                        # add in coverage check here
+
                         depth = self.cov_info.samples_coverage[sample_name][self.vcf_metadata.voc_info[key][voc].Position]
-                        empty_data = PlotData(self.vcf_metadata.voc_info[key][voc], None, sample_name, int(depth))
                         compare_type = self.vcf_metadata.voc_info[key][voc].Type.upper()
 
-                        if (alt == ref) or ivar_data is not None:
-                            start_len = len(html_plots[key][voc])
+                        start_len = len(html_plots[key][voc])
+                        #ret_val = True
+                        #TODO This logic can definately be cleaned up
+                        if compare_type != "REV":
+                            ret_val = self.append_ivar_info(html_plots, dat, key, voc, sample_name)
+                        elif compare_type == "REV" and alt == ref:
+                            rev_alt_freq = 1.00
+                            rev_alt_freq = rev_alt_freq - (float(dat.ALT_DEPTH) / float(dat.TOTAL_DEPTH))
+                            rev_plot_data = PlotData(self.vcf_metadata.voc_info[key][voc], 
+                            IvarFields(ALT_FREQ=rev_alt_freq, POS=pos, REF=ref, ALT=alt), sample_name, int(depth), 
+                            colour_palette="CSS_colours_rev")
+                            html_plots[key][voc].append(rev_plot_data)
                             ret_val = True
-                            #TODO This logic can definately be cleaned up
-                            if ivar_data is not None and compare_type != "REV":
-                                for i in ivar_data:
-                                    ret_val = self.append_ivar_info(html_plots, i, key, voc, sample_name)
-                            
-                            elif compare_type == "REV" and ivar_data is not None and alt == ref:
-                                rev_alt_freq = 1.00
-                                for data in ivar_data:
-                                    rev_alt_freq = rev_alt_freq - float(data.ALT_FREQ)
-                                    
-                                rev_plot_data = PlotData(self.vcf_metadata.voc_info[key][voc], 
-                                IvarFields(ALT_FREQ=rev_alt_freq, POS=pos, REF=ref, ALT=alt), sample_name, int(depth), 
-                                colour_palette="CSS_colours_rev")
-                                html_plots[key][voc].append(rev_plot_data)
-                            else:
-                                ret_val = False
+                        
+                        if ret_val:
+                            break # leave loop if entry found
 
-                            if not ret_val and len(html_plots[key][voc]) == start_len:
-                                html_plots[key][voc].append(empty_data) # add empty value if data could not be found
-                        else:
-                            vlog.logger.debug(f"The no data found VOC {key} mutations {voc}")
-                            html_plots[key][voc].append(empty_data)
+                        # refactoring may have made below code redundant
+                    if not ret_val and len(html_plots[key][voc]) == start_len:
+                        #vlog.logger.debug(f"No data found VOC {key} mutations {voc}")
+                        #vlog.logger.debug(f"Start Length: {start_len} End Length: {len(html_plots[key][voc])}")
+                        #vlog.logger.debug(f"Return value: {ret_val}")
+                        #vlog.logger.debug(f"Data value: {dat}")
+                        html_plots[key][voc].append(empty_data) # add empty value if data could not be found
+                        #else:
+                        #    vlog.logger.debug(f"No data found VOC {key} mutations {voc}")
+                        #    vlog.logger.debug(f"Data value: {dat}")
+                        #    #html_plots[key][voc].append(empty_data)
+                        #    ret_val = True
                 else:
-                    vlog.logger.debug(f"The no data found VOC {key} mutations {voc}")
+                    vlog.logger.debug(f"No data found VOC {key} mutations {voc}")
                     html_plots[key][voc].append(empty_data)
                             
         return html_plots
@@ -283,7 +316,7 @@ class VCFDataHTML:
         vcf_data_meta = self.vcf_metadata.voc_info[key_val][voic]
         # to compare indels, vcf parser sheet places ref at front
         compare_type = vcf_data_meta.Type.upper()
-        if compare_type != "SNP" and compare_type != "MNP": 
+        if compare_type not in {"SNP", "MNP"}: 
             if compare_type == "DEL":
                 # splitting string to rwmove first char as in vcfparser
                 # we include the ref codon and ivar includes a starting -
@@ -291,19 +324,24 @@ class VCFDataHTML:
                 meta_del = vcf_data_meta.Ref[1:]
                 test = ivar_del == meta_del
                 if not test:
-                    vlog.logger.info(f"Mismatch in deletion from metadata: {meta_del} and VCF deletion {ivar_data_val.ALT}")
+                    vlog.logger.debug(f"Mismatch in deletion from metadata: {meta_del} and VCF deletion {ivar_data_val.ALT}")
                     return False
-                else:
-                    html_plots_obj[key_val][voic].append(plot_data)
+                html_plots_obj[key_val][voic].append(plot_data)
+                return True
+                   
             elif compare_type == "INS":
                 ivar_ins = ivar_data_val.ALT[1:]
                 meta_ins = vcf_data_meta.Alt[1:]
                 test = ivar_ins == meta_ins
                 if not test:
-                    vlog.logger.info(f"Mismatch in insertion from metadata: {meta_ins} and VCF deletion {ivar_data_val.ALT}")
+                    vlog.logger.debug(f"Mismatch in insertion from metadata: {meta_ins} and VCF deletion {ivar_data_val.ALT}")
                     return False
-                else:
-                    html_plots_obj[key_val][voic].append(plot_data)
+                html_plots_obj[key_val][voic].append(plot_data)
+                return True
+
+            vlog.logger.warning(f"Support not provided for mutation type {vcf_data_meta.Type}")
+            return False
+                    #return False
             # Commenting out MNPS as freebayes includes them
             #elif compare_type == "MNP":
             #    #TODO move cv into static methods
@@ -348,19 +386,22 @@ class VCFDataHTML:
             #    else:
             #        vlog.logger.info(f"Could not combine mutations for {voic} due to a Coefficient of Variation greater than {cov_var}.")
             #        return False
-            else:
-                vlog.logger.warning(f"Support not provided for mutation type {vcf_data_meta.Type}")
-                return False
+
         else:
             test_alt = vcf_data_meta.Alt == ivar_data_val.ALT
             test_ref = vcf_data_meta.Ref == ivar_data_val.REF
             query_combo = ivar_data_val.REF + str(ivar_data_val.POS) + ivar_data_val.ALT
-            if test_alt and test_ref and self.vcf_metadata.voc_info[key_val].get(query_combo) is not None:
+            query_val = self.vcf_metadata.voc_info[key_val].get(query_combo)
+            #vlog.logger.debug(f"(ALT) SNP or MNP Comparisons: {test_alt} {ivar_data_val.ALT} {vcf_data_meta.Alt}")
+            #vlog.logger.debug(f"(REF) SNP or MNP Comparisons: {test_ref} {ivar_data_val.REF} {vcf_data_meta.Ref}")
+            #vlog.logger.debug(f"(QUERY) SNP or MNP Comparisons: {query_val} {query_combo}")
+            if test_alt and test_ref and query_val is not None:
                 html_plots_obj[key_val][voic].append(plot_data)
-            else:
-                vlog.logger.info(f"Mismatch in substitution from metadata: {vcf_data_meta.Ref} at"\
-                    f" position {ivar_data_val.POS} and VCF {ivar_data_val.ALT}")
-                return False
+                #vlog.logger.debug(f"Added {query_combo}")
+                return True
+            vlog.logger.debug(f"Mismatch in substitution from metadata: {vcf_data_meta.Ref} at position {ivar_data_val.POS} and VCF {ivar_data_val.ALT}")
+            return False
+        #vlog.logger.critical("Unhandled condition in appending VCF information.")
 
     def check_alt_prescence(self, combo, voc_key):
         """
@@ -381,8 +422,6 @@ class VCFDataHTML:
             self.header_tags[0] + "" + self.header_tags[1]]
 
             voic_data = figure_data[data]
-            #print(data)
-            #print(voic_data)
             positions = list(voic_data.keys())
 
             # replaceing header tags for samples only
@@ -394,7 +433,6 @@ class VCFDataHTML:
             for voic in voic_data: # add figure data
                 #print(voic_data[voic][0].metadata)
                 html_figure.append("<tr style=\"height:200px;width:50px\">")
-                #print(voic_data[voic])
                 col_name = voic_data[voic][0].metadata.AAName + "|" + voic_data[voic][0].metadata.NucName # getting first value for row name
                 html_figure.append("<td style=\"font-weight: 600;padding: 10px;font-size:50px;\">" + col_name + self.td_tags[1])
                 for vcf_row in voic_data[voic]:
@@ -403,7 +441,7 @@ class VCFDataHTML:
                         alt_freq = "LC"
                         colour_css = "#ffffff"
                         if vcf_row.sample_depth >= self.low_cov_thresh:
-                            alt_freq = str(round(float(vcf_row.vcf_data.ALT_DEPTH) / float(vcf_row.vcf_data.TOTAL_DEPTH), 3)) # get alt freq col
+                            alt_freq = str(round((float(vcf_row.vcf_data.ALT_DEPTH) / float(vcf_row.vcf_data.TOTAL_DEPTH)), 3)) # get alt freq col
                             colour_css = self.colour_pals[vcf_row.colour_palette][self.pick_colour(alt_freq=alt_freq)] # get index based on colur scale
 
                         row_data = f"<td bgcolor={colour_css} style=\"color:{self.css_text_colour};font-weight: 600;padding: 10px;font-size:50px\">"
@@ -521,15 +559,18 @@ class VCFDataHTML:
 if __name__ == "__main__":
     #ivar_data_ = ReadIvar("tests/22_AB16_GP_0414.tsv")
     #ivar_data2 = ReadIvar("tests/22_WPG17_NE_0426_2.tsv")
-    variant_data = ["tests/22_AB16_GP_0414.tsv", "tests/22_WPG17_NE_0426_2.tsv"]
-    parser_sheet = "tests/VCFParser_20220516.txt"
-    vcf_dat = [ReadIvar(key) for key in variant_data]
+    #variant_data = ["tests/22_AB16_GP_0414.tsv", "tests/22_WPG17_NE_0426_2.tsv"]
+    #variant_data = [i for i in glob.glob("./tests/*.vcf")]
+    #parser_sheet = "tests/VCFParser_20220516.txt"
+    #vcf_dat = [ReadVCF(key) for key in variant_data]
 
-    vcf_html = VCFDataHTML(VariantData(vcf_dat), "tests/VCFParser_tester.txt", "./tests", 30, "./tests")
-    vcf_html.combine_html_plots()
+    #vcf_html = VCFDataHTML(VariantData(vcf_dat), "tests/VCFParser_tester.txt", "./tests", 30, "./tests")
+    #vcf_html.combine_html_plots()
     #import InputOptions
     #InputOptions.glob_directories(t_ivar, bam_dir, parser_sheet, cov, out_dir)
-
+    import InputOptions
+    #python3 ./VCFViz/CommandLineArgs.py directory-glob -i /mnt/w/Projects/Project_Chrystal/2020_SARS-CoV-2_Sewage_Project/Bioinformatics/VCFViz_testing/variants3 -b /mnt/w/Projects/Project_Chrystal/2020_SARS-CoV-2_Sewage_Project/Bioinformatics/VCFViz_testing/bams -o /mnt/w/Projects/Project_Chrystal/2020_SARS-CoV-2_Sewage_Project/Bioinformatics/VCFViz_testing/ -c 30 -m /mnt/w/Projects/Project_Chrystal/2020_SARS-CoV-2_Sewage_Project/Databases/vcfparser_sheets/VCFParser_20220923_viz_test.txt 
+    InputOptions.glob_directories("/mnt/w/Projects/Project_Chrystal/2020_SARS-CoV-2_Sewage_Project/Bioinformatics/VCFViz_testing/variants3", "/mnt/w/Projects/Project_Chrystal/2020_SARS-CoV-2_Sewage_Project/Bioinformatics/VCFViz_testing/bams", "/mnt/w/Projects/Project_Chrystal/2020_SARS-CoV-2_Sewage_Project/Databases/vcfparser_sheets/VCFParser_20220923_viz_test.txt", 30, "/mnt/w/Projects/Project_Chrystal/2020_SARS-CoV-2_Sewage_Project/Bioinformatics/VCFViz_testing/")
 
 
 

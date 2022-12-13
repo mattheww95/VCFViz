@@ -20,8 +20,10 @@ They must be in that order as well.
 2022-05-09: Matthew Wells
 """
 
+from cProfile import run
 from collections import namedtuple, defaultdict
 from dataclasses import dataclass
+import itertools
 from typing import NamedTuple, List
 from enum import Enum, auto
 import sys
@@ -43,6 +45,7 @@ class MutationTypes(Enum):
 class VCFTags:
     """
     A class to contain the format and info tags
+    TODO need to add a case for no alt, as in the case when information about every site is being output 
     """
     contig: dict = {}
     FORMAT: dict = {}
@@ -320,28 +323,67 @@ class VariantData:
     def __init__(self, variants_list) -> None:
         self.variants_list = variants_list
         # determine to call ReadIvar or ReadVCF
+        self.samples = set()
         self.translate_vcf()
+        print(self)
+    
+    def __repr__(self) -> str:
+        print(f"Sample,Pos_Key,POS,ALT,REF,TOTAL_DEPTH,ALT_DEPTH")
+        for key in self.variant_data:
+            for k in self.variant_data[key]:
+                for value in self.variant_data[key][k]:
+                    print(f"{key},{k},{value.POS},{value.ALT},{value.REF},{value.TOTAL_DEPTH},{value.ALT_DEPTH}")
+        return ""
     
     def translate_vcf(self):
         """
         Pick the right translator to convert the VCF data into a common format for the heatmaps
         """
-        #print(self.variants_list.count(type(self.variants_list[0])) == len(self.variants_list))
+
         out = [type(i) for i in self.variants_list]
         value_type = out[1:] == out[:-1]
         if not value_type:
             VCFLogger.logger.critical("A mixture of VCF files and Ivar files has been recorded. Bailing out")
             exit(-1)
-
+    
         if out[0] == ReadIvar:
             VCFLogger.logger.info("You are using Ivar files.")
             self.ivar_translation()
+            for i in self.variant_data:
+                self.samples.add(i)
         elif out[0] == ReadVCF:
             VCFLogger.logger.info("You are using VCF files.")
             self.vcf_translation()
+            self.vcf_translation_merge()
+            for i in self.variant_data:
+                self.samples.add(i)
+            self.count_occurences(self.variant_data)
         else:
             VCFLogger.logger.critical(f"{type(out[0])} is not yet supported for visualization")
             exit(-1)
+    
+    def count_occurences(self, variant_data):
+        """
+        Check the number occurences of each entry, as duplicate values keep showing up
+        """
+        occurences = dict()
+        bad_entries = False
+        for k, v in variant_data.items():
+            occurences[k] = dict()
+            for f in v.values():
+                for i in f:
+                    if occurences[k].get(f"{i.ALT}{i.POS}") is None:
+                        occurences[k][f"{i.ALT}{i.POS}"] = 0
+                    occurences[k][f"{i.ALT}{i.POS}"] += 1
+        for k in occurences:
+            for v in occurences[k]:
+                if occurences[k][v] > 1:
+                    VCFLogger.logger.critical("Too many entries occured", k, v, occurences[k][v])
+                    bad_entries = True
+        if bad_entries:
+            VCFLogger.logger.critical("Your VCF may have been improperly parsed.")
+            exit(-1)
+
 
     def ivar_translation(self):
         """
@@ -350,7 +392,7 @@ class VariantData:
         for vcf in self.variants_list:
             for pos, values in vcf.vcf_info.items():
                 for v in values:
-                    #print(v)
+                    
                     alt_depth = int(v.ALT_DP) # get reverse read and forward reads
                     total_depth = int(v.TOTAL_DP)
                     mut_type = v.TYPE
@@ -367,46 +409,110 @@ class VariantData:
     
     def vcf_translation(self):
         """
-        Translate vcf data into the CommonVCF type format
+        Translate vcf data into the CommonVCF type format.
         """
         for vcf in self.variants_list:
             for key, values in vcf.vcf_file.items():
+                if values[0].row.ALT == ".":
+                    # Some VCF formats allow for all positions to be output, and denote not deviation from reference as an alt
+                    continue
                 for v in values:
                     cigar_data = None
                     cigar_trasformed = None
                     if "," in v.row.ALT:
                         cigar_data = self.split_vcf_record(v)
-                    for form in v.FORMAT.values():
-                        alt_depth = int(form["AD"].split(",")[-1])
-                        total_depth = int(form["DP"])
-                        mut_type = v.INFO["TYPE"].upper()
-                        pos = int(v.row.POS)
-                        chrom = v.row.CHROM
-                        sample = vcf.sample_name
-                        if cigar_data is None:
-                            cigar_data = [v.row.REF, v.row.ALT, alt_depth, v.INFO["CIGAR"], pos]
-                        if self.variant_data.get(sample) is None:
-                            self.variant_data[sample] = dict()
-                        if self.variant_data[sample].get(pos) is None:
-                            self.variant_data[sample][pos] = list()     
-                        try:
-                            if v.INFO["TYPE"].upper() not in {"SNP", "MNP"}:
-                                cigar_trasformed = self.cigar_translation(*cigar_data)
-                                #print(cigar_trasformed)
-                                alt = None # TODO return alt value to fill common VCF format
-                                for cigar in cigar_trasformed:
-                                    alt = cigar[1]
-                                    self.variant_data[sample][pos].append(
-                                        CommonVCF(sample, chrom, cigar[2], total_depth, alt_depth, pos, alt, cigar[3]))
-                            else:
-                                self.variant_data[sample][pos].append(CommonVCF(sample, chrom, mut_type, total_depth, alt_depth, pos, v.row.ALT, v.row.REF))
-                        except ValueError:
-                            VCFLogger.logger.critical("Found unhandled situation, multiple variants listed per site")
-                            VCFLogger.logger.critical(key)
-                            VCFLogger.logger.critical(v)
-                            exit(-1)
-                        
+                # moved form back as maybe responsible for multiple additons of values
+                for form in v.FORMAT.values():
+                    # I now know I could have used the AO values and my life would have been easer
+
+                    alt_depth = int(form["AD"].split(",")[-1])
+                    total_depth = int(form["DP"])
+                    mut_type = v.INFO["TYPE"].upper()
+                    pos = int(v.row.POS)
+                    chrom = v.row.CHROM
+                    sample = vcf.sample_name
+                    #except KeyError:
+                    #    VCFLogger.logger.critical(f"Missing key in vcf translation for sample {vcf.sample_name}")
+                    #    VCFLogger.logger.critical(f"Bailing out.")
+                    #    exit(-1)
+                    if cigar_data is None:
+                        cigar_data = [v.row.REF, v.row.ALT, alt_depth, v.INFO["CIGAR"], pos]
+                    if self.variant_data.get(sample) is None:
+                        self.variant_data[sample] = dict()
+                    try:
+                        if v.INFO["TYPE"].upper() not in {"SNP", "MNP"}:
+                            cigar_trasformed = self.cigar_translation(*cigar_data)
+                          
+                            alt = None # TODO return alt value to fill common VCF format
+                            #alt_d was not properly being tracked when multiple aleles present
+                            for cigar, alt_d in zip(cigar_trasformed, form["AD"].split(",")[1:]):
+                                alt = cigar[1]
+                                if self.variant_data[sample].get(int(cigar[0])) is None:
+                                    self.variant_data[sample][int(cigar[0])] = list()
+                                self.variant_data[sample][int(cigar[0])].append(CommonVCF(sample, chrom, cigar[2], total_depth, int(alt_d), int(cigar[0]), alt, cigar[3]))
+                        else:
+                            if self.variant_data[sample].get(pos) is None:
+                                self.variant_data[sample][pos] = list()    
+                            self.variant_data[sample][pos].append(CommonVCF(sample, chrom, mut_type, total_depth, alt_depth, pos, v.row.ALT, v.row.REF))
+                    except ValueError:
+                        VCFLogger.logger.critical("Found unhandled situation, multiple variants listed per site")
+                        VCFLogger.logger.critical(key)
+                        VCFLogger.logger.critical(v)
+                        exit(-1)
     
+    def vcf_translation_merge(self):
+        """
+        As data from VCF's requires specifies multiple variants at the same sites in cigar strings
+        those samples need to be comnined
+        #TODO this should just rebuild the variant data dictionary. It iwll be cleaner
+        """
+        translated_data = self.variant_data
+        new_var_data = dict()
+        for key in translated_data:
+            new_var_data[key] = dict()
+            for pos in translated_data[key]:
+                new_var_data[key][pos] = list()
+                data_to_merge = translated_data[key][pos]
+                if len(data_to_merge) > 1:
+                    #TODO this feels like it can be cleaned up by mapping a function
+                    positions = {f"{v.POS}{v.ALT}": list() for v in data_to_merge}
+                    for k, v in enumerate(data_to_merge):
+                        positions[f"{v.POS}{v.ALT}"].append((k, v))
+                    out_data = self.merge_records(positions)
+                    for k, v in out_data.items():
+                        #TODO this may be dropping entries :c
+                        #TODO make test case of multiple allele changes
+                        for value in v:
+                            if translated_data[key].get(value.POS) is None:
+                                translated_data[key][value.POS] = list()
+                            new_var_data[key][value.POS].append(*v)
+                else:
+                    new_var_data[key][pos] = translated_data[key][pos]
+        self.variant_data = new_var_data
+
+    @staticmethod
+    def merge_records(records: dict):
+        """
+        Merge the like vcf records.
+        """
+        records_out = {k: list() for k in records}
+        for key, values in records.items():
+            value = values[0][1] # getting passed a tuple of index position, and value
+            if len(values) > 1:
+                new_record = CommonVCF(sample_name=value.sample_name,
+                                        CHROM=value.CHROM,
+                                        TYPE=value.TYPE,
+                                        TOTAL_DEPTH=value.TOTAL_DEPTH,
+                                        ALT_DEPTH=sum([i[1].ALT_DEPTH for i in values]),
+                                        POS=value.POS,
+                                        ALT=value.ALT,
+                                        REF=value.REF)
+                records_out[key].append(new_record)
+            else:
+                records_out[key].append(value)
+        return records_out
+
+
     def split_vcf_record(self, vcf_row):
         """
         Split a vcf record into multiple if multiple entires listed at one site.
@@ -418,7 +524,7 @@ class VariantData:
         vcf_form = list(vcf_row.FORMAT.keys())
         if len(vcf_form) > 1:
             VCFLogger.logger.critical("More than one sample recorded in VCF file, this behaviour is currently not supported. Bailing out") 
-        # 1: for teh AD tag as first value correpsonds to the reference
+        # 1: for the AD tag as first value correpsonds to the reference
         data = list(zip([vcf_row.row.REF] * len(vcf_row.row.ALT.split(",")), vcf_row.row.ALT.split(","), vcf_row.FORMAT[vcf_form[0]]["AD"].split(",")[1:], vcf_row.INFO["CIGAR"].split(","), [vcf_row.row.POS] * len(vcf_row.row.ALT.split(","))))
         return data
 
@@ -449,6 +555,7 @@ class VariantData:
         }
 
         # args1 = cigar op, arg 2 = op length, arg3 ref_pos 
+        #TODO ref still not quite being chopped up right for insertions
         position_ops = {
             "M": lambda *args: int(args[1]), # no ref increase
             "X": lambda *args: int(args[1]), # increase ref,
@@ -460,27 +567,32 @@ class VariantData:
         new_alt = str()
         running_pos = 0
         ref_pos = int(pos)
-        ref_poses = [ref_pos]
+        ref_poses = list()
         alt_slices = list()
+        ref_slices = list()
         for i in cigar:
-      
             alt_slices.append(cigar_operations[i[0]](i[0], i[1], ref, alt, running_pos))
             new_alt += alt_slices[-1]
-            ref_pos += position_ops[i[0]](i[0], i[1], ref_pos)
             ref_poses.append(ref_pos)
+            if i[0] not in {"I"}:
+                ref_slices.append(ref[running_pos:running_pos + i[1]])
+                ref_pos += position_ops[i[0]](i[0], i[1], ref_pos)
+
             if i[0] != "D":
+                # leave running position incremented for all but deletions as references string
                 running_pos += i[1]
 
-        data = [i for i in zip(ref_poses, alt_slices, [i[0] for i in cigar])]
+        data = list(zip(ref_poses, alt_slices, [i[0] for i in cigar], ref_slices))
         
         variable_tag = {
             "I": ("+", "INS"),
             "X": ("", "SNP"),
             "D": ("-", "DEL"),
         }
+
         for i in data:
             if i[2] != "M":
-                return_values.append((i[0], f"{variable_tag[i[2]][0]}{i[1]}", variable_tag[i[2]][1], ref))
+                return_values.append((i[0], f"{variable_tag[i[2]][0]}{i[1]}", variable_tag[i[2]][1], i[3]))
         return return_values
 
         
@@ -498,7 +610,7 @@ class VariantData:
             for arg in args:
                 cigar_ops = self.split_cigar_string(arg[3])
                 cigar_transformed.extend(self.apply_cigar_ops(cigar_ops, arg[0], arg[1], arg[4]))
-                #print(cigar_ops, arg[0])
+               
         else:
             cigar_ops = self.split_cigar_string(args[3])
             cigar_transformed.extend(self.apply_cigar_ops(cigar_ops, args[0], args[1], args[4]))

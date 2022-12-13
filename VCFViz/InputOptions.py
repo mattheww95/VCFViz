@@ -8,7 +8,7 @@ Handle different input options being either globs, input sheet or specification 
 
 try:
     from VCFViz.VCFlogging import VCFLogger as vlog
-    from VCFViz.VCFToJson import ReadIvar, ReadVCF
+    from VCFViz.VCFToJson import ReadIvar, ReadVCF, VariantData
     from VCFViz import RenderHTML
     from VCFViz.RenderHTML import VCFDataHTML
     from VCFViz import CoverageData
@@ -24,16 +24,16 @@ except ImportError:
     
 from datetime import datetime
 import os
-
+import glob
 
 def determine_vcf_format(sample_file):
     """
     Determine which vcf reader method to use
     """
     if sample_file[sample_file.rindex(".")+1:] == "tsv":
-        return (ReadIvar, ".tsv")
+        return (ReadIvar, "*.tsv")
     else:
-        return (ReadVCF, ".vcf")
+        return (ReadVCF, "*.vcf")
 
 #Submission sheet input (Retain sample order)
 def process_submission_sheet(sample_sheet: str, metadata: str, coverage_threshold: int, output_directory: str):
@@ -78,9 +78,14 @@ def glob_directories(ivar_directory:str, bam_directory: str, metadata: str, cove
     """
     file_reader_method = None
     glob_ext = None
-    #TODO this is a bottle nexk that can be easily eliminated in the future
-    file_reader_method, glob_ext = determine_vcf_format(os.path.join(ivar_directory, os.listdir(ivar_directory)[0]))
-    ivar_data = [file_reader_method(os.path.join(ivar_directory, i)) for i in os.listdir(ivar_directory) if os.path.splitext(i)[-1].lower() == glob_ext]
+    #TODO this is a bottle neck that can be easily eliminated in the future
+    if file_reader_method or glob_ext is None:
+        file_reader_method, glob_ext = determine_vcf_format(os.path.join(ivar_directory, os.listdir(ivar_directory)[0]))
+    
+    #ivar_data = [file_reader_method(os.path.join(ivar_directory, i)) for i in os.listdir(ivar_directory) if os.path.splitext(i)[-1].lower() == glob_ext]
+    ivar_data = [file_reader_method(i) for i in glob.glob(os.path.join(ivar_directory, glob_ext))]
+    if not ivar_data:
+        vlog.logger.critical(f"Could not find vcf files in {os.path.join(ivar_directory, glob_ext)}")
     vcf_html = VCFDataHTML(VariantData(ivar_data), metadata, bam_directory, coverage_threshold, output_directory)
     vcf_html.combine_html_plots()
 
