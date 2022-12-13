@@ -630,10 +630,8 @@ if __name__=="__main__":
     #for key in glob.glob("tests/*.tsv"):
     #    ivar_file = ReadIvar(key)
     #    print(ivar_file.vcf_info)
-    #ivar_file = ReadIvar("tests/22_WPG17_NE_0426_2.tsv")
     vcf_data = [ReadVCF(key) for key in glob.glob("tests/*.vcf")]
     #vcf_data = [ReadIvar(key) for key in glob.glob("tests/*.tsv")]
-    #ivar_data.append(ReadVCF("tests/22_WPG35_SE_0830_1.ivar_trim.sorted.vcf"))
     VariantData(vcf_data)
     
     #ivar_file.print_ivar_info()
