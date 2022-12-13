@@ -9,7 +9,7 @@ import logging
 class VCFLogger(object):
     logger = logging.getLogger()
     FORMAT = "[%(levelname)s %(asctime)s] %(message)s"
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
     logging.basicConfig(format=FORMAT)
 
 
